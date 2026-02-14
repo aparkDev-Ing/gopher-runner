@@ -1,0 +1,5 @@
+test-job:
+  tags:
+    - gopher-runner
+  script:
+    - echo "Hello from GitLab!"
