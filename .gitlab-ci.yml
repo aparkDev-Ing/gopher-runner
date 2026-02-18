@@ -1,10 +1,17 @@
+stages:
+  - build
+
 multi-step-test:
+  stage: build
   tags:
     - gopher-runner
   before_script:
-    - echo "PREPARING: Downloading dependencies..."
+    - "echo 'PREPARING: Downloading dependencies...'"
+    - "mkdir -p build_output"
   script:
-    - echo "EXECUTING: Running the main build..."
-    - echo "DONE: Build finished."
+    - "echo 'EXECUTING: Running the main build...'"
+    - "echo 'Gopher Runner is processing this job now'"
+    - "echo 'DONE: Build finished.'"
   after_script:
-    - echo "CLEANUP: Removing temporary files..."
+    - "echo 'CLEANUP: Removing temporary files...'"
+    - "rm -rf build_output"
