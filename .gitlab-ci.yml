@@ -1,5 +1,10 @@
-test-job:
+multi-step-test:
   tags:
     - gopher-runner
+  before_script:
+    - echo "PREPARING: Downloading dependencies..."
   script:
-    - echo "Hello from GitLab!"
+    - echo "EXECUTING: Running the main build..."
+    - echo "DONE: Build finished."
+  after_script:
+    - echo "CLEANUP: Removing temporary files..."

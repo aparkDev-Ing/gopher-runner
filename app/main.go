@@ -149,18 +149,19 @@ func processJob(jobResponse *JobResponse) (err error) {
 
 	fmt.Printf("--- Job Id: %d\n", jobResponse.ID)
 
-	for _, v := range jobResponse.Steps {
-		fmt.Printf("--- Step: %v\n", v.Name)
+	for i, step := range jobResponse.Steps {
+		fmt.Printf("--- Step%d: %v\n", i+1, step.Name)
 
-		for _, v := range v.Script {
+		stepLog := fmt.Sprintf("\nStep%d: %v \n", i+1, step.Name)
+		log.WriteString(stepLog)
+
+		for _, v := range step.Script {
 			fmt.Printf("--- Execute Command: %v\n", v)
 
 			shellCmd := exec.Command("bash", "-c", v)
-
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
 			// Corrected line:
 			header := fmt.Sprintf("\n\033[32;1m[%s] $ %s\033[0m\n", timestamp, v)
-
 			log.WriteString(header)
 
 			output, err := shellCmd.CombinedOutput()
@@ -211,7 +212,7 @@ func updateJobStatus(jobId int, status string, trace string) (int, error) {
 		return -1, err
 	}
 
-	fmt.Printf("--- Invoking Update Job Status API | URL -> %v | LOG -> %s\n", fullUrl, trace)
+	fmt.Printf("--- Invoking Update Job Status API | LOG ->\n %s\n", trace)
 
 	resp, err := httpClient.Do(req)
 
