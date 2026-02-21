@@ -16,17 +16,25 @@ type JobResponse struct {
 		Name   string   `json:"name"`
 		Script []string `json:"script"`
 	} `json:"steps"`
+	Variables []Variable `json:"variables"`
+}
+
+type Variable struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Public bool   `json:"public"`
+	Masked bool   `json:"masked"`
 }
 
 type UpdateJobStatus struct {
-	Token  string `json:"token"`
-	Status string `json:"status"`
-	Trace  string `json:"trace"`
+	Token string `json:"token"`
+	State string `json:"state"`
+	Trace string `json:"trace"`
 }
 
 type Config struct {
-	Token           string
-	VerifyURL       string
-	RequestURL      string
-	StatusUpdateURL string
+	RegistrationToken string
+	VerifyURL         string
+	RequestURL        string
+	StatusUpdateURL   string
 }

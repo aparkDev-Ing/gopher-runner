@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	//"runtime"
+
 	"github.com/joho/godotenv"
 
 	constants "gitlab.com/aparkdev-ing/gopher-runner/constants"
@@ -43,7 +45,7 @@ func healthCheck() {
 
 }
 
-func formHttpRequest(url string, token string, requestStruct any) (*http.Request, error) {
+func formHttpRequest(url string, token string, requestStruct any, httpMethod string) (*http.Request, error) {
 
 	//if performacne is needed
 	//json.NewEncoder(someWriter).Encode(myStruct).
@@ -53,7 +55,7 @@ func formHttpRequest(url string, token string, requestStruct any) (*http.Request
 		return nil, errorLogger(err, constants.SERIALIZATION_ERROR)
 	}
 
-	req, err := http.NewRequest(constants.POST_METHOD, url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(httpMethod, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, errorLogger(err, constants.HTTP_REQUEST_FORM_ERROR)
 	}
@@ -73,14 +75,14 @@ func formHttpRequest(url string, token string, requestStruct any) (*http.Request
 // think of using validateResponse helper here too
 func verifyRunner() (int, error) {
 
-	token := AppConfig.Token
+	token := AppConfig.RegistrationToken
 	url := AppConfig.VerifyURL
 
 	verifyRunnerRequest := VerifyRequest{
 		Token: token,
 	}
 
-	req, err := formHttpRequest(url, token, verifyRunnerRequest)
+	req, err := formHttpRequest(url, token, verifyRunnerRequest, constants.POST_METHOD)
 
 	if err != nil {
 		return -1, err
@@ -102,7 +104,7 @@ func verifyRunner() (int, error) {
 
 func requestJob() (*JobResponse, error) {
 
-	token := AppConfig.Token
+	token := AppConfig.RegistrationToken
 	url := AppConfig.RequestURL
 
 	requestJobStruct := JobRequest{
@@ -110,7 +112,7 @@ func requestJob() (*JobResponse, error) {
 		TagList: []string{constants.GOPHER_RUNNER},
 	}
 
-	req, err := formHttpRequest(url, token, requestJobStruct)
+	req, err := formHttpRequest(url, token, requestJobStruct, constants.POST_METHOD)
 
 	if err != nil {
 		return nil, err
@@ -145,6 +147,15 @@ func requestJob() (*JobResponse, error) {
 
 func processJob(jobResponse *JobResponse) (err error) {
 
+	currentEnv := os.Environ()
+
+	for _, variable := range jobResponse.Variables {
+		kvPair := fmt.Sprintf("%s=%s", variable.Key, variable.Value)
+		currentEnv = append(currentEnv, kvPair)
+	}
+
+	token := jobResponse.Token
+
 	var log strings.Builder
 
 	fmt.Printf("--- Job Id: %d\n", jobResponse.ID)
@@ -159,6 +170,7 @@ func processJob(jobResponse *JobResponse) (err error) {
 			fmt.Printf("--- Execute Command: %v\n", v)
 
 			shellCmd := exec.Command("bash", "-c", v)
+			shellCmd.Env = currentEnv
 			timestamp := time.Now().Format("2006-01-02 15:04:05")
 			// Corrected line:
 			header := fmt.Sprintf("\n\033[32;1m[%s] $ %s\033[0m\n", timestamp, v)
@@ -172,7 +184,7 @@ func processJob(jobResponse *JobResponse) (err error) {
 				fmt.Printf("Script Failure Output: %s\n", string(output))
 				footer := fmt.Sprintf("\n\033[31;1mERROR: Command failed: %v\033[0m\n", err)
 				log.WriteString(footer)
-				_, updateStatusError := updateJobStatus(jobResponse.ID, constants.FAILED, log.String())
+				_, updateStatusError := updateJobStatus(jobResponse.ID, constants.FAILED, log.String(), token)
 				if updateStatusError != nil {
 					return errorLogger(updateStatusError, "Error Occurred While Updating Job Status")
 				}
@@ -183,30 +195,30 @@ func processJob(jobResponse *JobResponse) (err error) {
 		}
 	}
 
-	_, updateStatusError := updateJobStatus(jobResponse.ID, constants.SUCCESS, log.String())
+	_, updateStatusError := updateJobStatus(jobResponse.ID, constants.SUCCESS, log.String(), token)
 
-	if err != nil {
+	if updateStatusError != nil {
 		return errorLogger(updateStatusError, "Error Occurred While Updating Job Status")
 	}
 
 	return nil
 }
 
-func updateJobStatus(jobId int, status string, trace string) (int, error) {
+func updateJobStatus(jobId int, state string, trace string, token string) (int, error) {
 
 	url := AppConfig.StatusUpdateURL
 
 	fullUrl := fmt.Sprintf("%s%d", url, jobId)
 
-	token := AppConfig.Token
+	// token := AppConfig.RegistrationToken
 
 	updateJobStatusRequest := UpdateJobStatus{
-		Token:  token,
-		Status: status,
-		Trace:  trace,
+		Token: token,
+		State: state,
+		Trace: trace,
 	}
 
-	req, err := formHttpRequest(fullUrl, token, updateJobStatusRequest)
+	req, err := formHttpRequest(fullUrl, token, updateJobStatusRequest, constants.PUT_METHOD)
 
 	if err != nil {
 		return -1, err
@@ -226,7 +238,7 @@ func updateJobStatus(jobId int, status string, trace string) (int, error) {
 		return resp.StatusCode, httpError
 	}
 
-	fmt.Printf("--- Invoking Update Job Status API Completed Successfully | Status Code: %v\n", resp)
+	fmt.Printf("--- Invoking Update Job Status API Completed Successfully | Status Code: %v\n", resp.StatusCode)
 
 	return resp.StatusCode, nil
 }
@@ -239,10 +251,10 @@ func loadEnv() {
 	}
 
 	AppConfig = Config{
-		Token:           getEnvOrPanic(constants.TOKEN),
-		VerifyURL:       getEnvOrPanic(constants.VERIFY_URL),
-		RequestURL:      getEnvOrPanic(constants.REQUEST_URL),
-		StatusUpdateURL: getEnvOrPanic(constants.STATUS_UPDATE_URL),
+		RegistrationToken: getEnvOrPanic(constants.TOKEN),
+		VerifyURL:         getEnvOrPanic(constants.VERIFY_URL),
+		RequestURL:        getEnvOrPanic(constants.REQUEST_URL),
+		StatusUpdateURL:   getEnvOrPanic(constants.STATUS_UPDATE_URL),
 	}
 }
 
@@ -258,10 +270,18 @@ func getEnvOrPanic(key string) string {
 func main() {
 	fmt.Println("Go-Runner Process Starts")
 	loadEnv()
-
 	healthCheck()
+	jobHandler()
+}
 
-	fmt.Println("Job Request initiates: ")
+func jobHandler() {
+
+	jobQueue := make(chan *JobResponse, 10)
+
+	noOfThread := 3 //runtime.NumCpu()
+	for i := 0; i < noOfThread; i++ {
+		go worker(jobQueue, i+1)
+	}
 
 	for {
 		job, err := requestJob()
@@ -273,23 +293,24 @@ func main() {
 		}
 
 		if job != nil {
-			fmt.Printf("Successfully claimed Job ID: %d\n", job.ID)
-			err := processJob(job)
-
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			fmt.Printf("Successfully Finished Job | Job ID: %d\n", job.ID)
+			jobQueue <- job
 		} else {
 			fmt.Printf("No Job Found. ")
 		}
 
-		time.Sleep(10 * time.Second)
+		//time.Sleep(10 * time.Second)
 	}
+}
 
-	//fmt.Println("Go-Runner Process Ends")
-
+func worker(jobQueue <-chan *JobResponse, threadId int) {
+	for job := range jobQueue {
+		printLog(job.ID, threadId, constants.CLAIMED)
+		err := processJob(job)
+		if err != nil {
+			fmt.Println(err)
+		}
+		printLog(job.ID, threadId, constants.FINISHED)
+	}
 }
 
 func errorLogger(err error, message string) error {
@@ -302,6 +323,10 @@ func errorLogger(err error, message string) error {
 	}
 
 	return nil
+}
+
+func printLog(jobId int, threadId int, jobType string) {
+	fmt.Printf("Thread ID: %d| Successfully %v Job ID: %d\n", threadId, jobType, jobId)
 }
 
 func validateResponse(resp *http.Response) (bool, error) {
