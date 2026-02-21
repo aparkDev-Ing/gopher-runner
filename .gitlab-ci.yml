@@ -1,17 +1,30 @@
-stages:
-  - build
+# stages:
+#   - build
 
-multi-step-test:
-  stage: build
-  tags:
-    - gopher-runner
-  before_script:
-    - "echo 'PREPARING: Downloading dependencies...'"
-    - "mkdir -p build_output"
-  script:
-    - "echo 'EXECUTING: Running the main build...'"
-    - "echo 'Gopher Runner is processing this job now'"
-    - "echo 'DONE: Build finished.'"
-  after_script:
-    - "echo 'CLEANUP: Removing temporary files...'"
-    - "rm -rf build_output"
+# multi-step-test:
+#   stage: build
+#   tags:
+#     - gopher-runner
+#   before_script:
+#     - "echo 'PREPARING: Downloading dependencies...'"
+#     - "mkdir -p build_output"
+#   script:
+#     - "echo 'EXECUTING: Running the main build...'"
+#     - "echo 'Gopher Runner is processing this job now'"
+#     - "echo 'DONE: Build finished.'"
+#   after_script:
+#     - "echo 'CLEANUP: Removing temporary files...'"
+#     - "rm -rf build_output"
+
+
+job_1:
+  script: sleep 10; echo "Hello from 1"
+  tags: [gopher-runner] # Make sure this matches your constants!
+
+job_2:
+  script: sleep 10; echo "Hello from 2"
+  tags: [gopher-runner]
+
+job_3:
+  script: sleep 10; echo "Hello from 3"
+  tags: [gopher-runner]
