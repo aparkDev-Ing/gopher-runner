@@ -17,14 +17,37 @@
 #     - "rm -rf build_output"
 
 
-job_1:
-  script: sleep 10; echo "Hello from 1"
-  tags: [gopher-runner] # Make sure this matches your constants!
+# job_1:
+#   script: sleep 10; echo "Hello from 1"
+#   tags: [gopher-runner] # Make sure this matches your constants!
 
-job_2:
-  script: sleep 10; echo "Hello from 2"
-  tags: [gopher-runner]
+# job_2:
+#   script: sleep 10; echo "Hello from 2"
+#   tags: [gopher-runner]
 
-job_3:
-  script: sleep 10; echo "Hello from 3"
-  tags: [gopher-runner]
+# job_3:
+#   script: sleep 10; echo "Hello from 3"
+#   tags: [gopher-runner]
+
+
+#test heartbeat
+stages:
+  - test
+
+test_job_1:
+  stage: test
+  tags:
+    - gopher-runner
+  script:
+    - echo "Starting Job 1"
+    - sleep 45
+    - echo "Job 1 Finished"
+
+test_job_2:
+  stage: test
+  tags:
+    - gopher-runner
+  script:
+    - echo "Starting Job 2"
+    - sleep 45
+    - echo "Job 2 Finished"

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -138,6 +139,9 @@ func requestJob() (*JobResponse, error) {
 
 	deserializationError := json.NewDecoder(resp.Body).Decode(&jobResponse)
 
+	//jsonData, _ := json.Marshal(jobResponse)
+	//fmt.Println("Job Response:", string(jsonData))
+
 	if deserializationError != nil {
 		return nil, errorLogger(deserializationError, constants.DESERIALIZATION_ERROR)
 	}
@@ -147,14 +151,38 @@ func requestJob() (*JobResponse, error) {
 
 func processJob(jobResponse *JobResponse) (err error) {
 
+	token := jobResponse.Token
+
+	heartBeat := make(chan bool, 1)
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		heartbeatMsg := strconv.Itoa(jobResponse.ID) + constants.HEARTBEAT_GENERIC_MESSAGE
+
+		for {
+			select {
+			case <-ticker.C:
+				_, err := updateJobStatus(jobResponse.ID, constants.RUNNING, heartbeatMsg, token)
+				if err != nil {
+					fmt.Printf("[JobId %d] Heartbeat failed: %v\n", jobResponse.ID, err)
+				}
+				fmt.Printf("Heartbeat sent for Job %d\n", jobResponse.ID)
+			case <-heartBeat:
+				fmt.Printf("Stopping heartbeat for Job %d\n", jobResponse.ID)
+				return
+			}
+		}
+
+	}()
+
 	currentEnv := os.Environ()
 
 	for _, variable := range jobResponse.Variables {
 		kvPair := fmt.Sprintf("%s=%s", variable.Key, variable.Value)
 		currentEnv = append(currentEnv, kvPair)
 	}
-
-	token := jobResponse.Token
 
 	var log strings.Builder
 
@@ -181,6 +209,7 @@ func processJob(jobResponse *JobResponse) (err error) {
 			log.WriteString(string(output))
 
 			if err != nil {
+				heartBeat <- true
 				fmt.Printf("Script Failure Output: %s\n", string(output))
 				footer := fmt.Sprintf("\n\033[31;1mERROR: Command failed: %v\033[0m\n", err)
 				log.WriteString(footer)
@@ -194,6 +223,9 @@ func processJob(jobResponse *JobResponse) (err error) {
 			fmt.Printf("--- Command Output: %s\n", string(output))
 		}
 	}
+
+	//to tell heartbeat thread to stop
+	heartBeat <- true
 
 	_, updateStatusError := updateJobStatus(jobResponse.ID, constants.SUCCESS, log.String(), token)
 
@@ -295,10 +327,10 @@ func jobHandler() {
 		if job != nil {
 			jobQueue <- job
 		} else {
-			fmt.Printf("No Job Found. ")
+			//fmt.Printf("No Job Found. ")
 		}
 
-		//time.Sleep(10 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -326,12 +358,13 @@ func errorLogger(err error, message string) error {
 }
 
 func printLog(jobId int, threadId int, jobType string) {
-	fmt.Printf("Thread ID: %d| Successfully %v Job ID: %d\n", threadId, jobType, jobId)
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	fmt.Printf("[%s] | Thread ID: %d| Successfully %v Job ID: %d\n", timestamp, threadId, jobType, jobId)
 }
 
 func validateResponse(resp *http.Response) (bool, error) {
 
-	fmt.Println("Job Request Response:", resp.StatusCode)
+	//fmt.Println("Main Thread | Job Request Response:", resp.StatusCode)
 
 	if resp != nil {
 
