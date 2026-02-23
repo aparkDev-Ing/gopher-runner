@@ -249,17 +249,24 @@ func updateJobTrace(jobId int, logContent string, token string) error {
 		return errorLogger(err, constants.SERIALIZATION_ERROR)
 	}
 
+	logIndex := 0
+	if len(logContent) > 0 {
+		logIndex = len(logContent) - 1
+	}
+
 	// Required headers for the Trace API
 	req.Header.Set("JOB-TOKEN", token)
 	req.Header.Set("Content-Type", "text/plain")
 	// Content-Range tells GitLab: "Here is the log from byte 0 to byte X"
-	req.Header.Set("Content-Range", fmt.Sprintf("0-%d", len(logContent)))
+	req.Header.Set("Content-Range", fmt.Sprintf("0-%d", logIndex))
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return errorLogger(err, constants.HTTP_REQUEST_ERROR)
 	}
 	defer resp.Body.Close()
+
+	//fmt.Println("Raw JSON Response:", resp.StatusCode)
 
 	_, httpResponse := validateResponse(resp)
 
@@ -399,12 +406,18 @@ func printLog(jobId int, threadId int, jobType string) {
 
 func validateResponse(resp *http.Response) (bool, error) {
 
-	//fmt.Println("Main Thread | Job Request Response:", resp.StatusCode)
+	// ... inside requestJob ...
+	// bodyBytes, _ := io.ReadAll(resp.Body)
+	// fmt.Println("Raw JSON Response:", string(bodyBytes))
 
 	if resp != nil {
 
 		switch resp.StatusCode {
 
+		case http.StatusAccepted:
+			{
+				return true, nil
+			}
 		case http.StatusOK:
 			{
 				return true, nil
