@@ -40,7 +40,7 @@ test_job_1:
     - gopher-runner
   script:
     - echo "Starting Job 1"
-    - sleep 45
+    - sleep 5
     - echo "Job 1 Finished"
 
 test_job_2:
@@ -49,5 +49,5 @@ test_job_2:
     - gopher-runner
   script:
     - echo "Starting Job 2"
-    - sleep 45
+    - sleep 5
     - echo "Job 2 Finished"

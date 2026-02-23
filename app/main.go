@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -152,7 +151,6 @@ func requestJob() (*JobResponse, error) {
 func processJob(jobResponse *JobResponse) (err error) {
 
 	token := jobResponse.Token
-
 	heartBeat := make(chan bool, 1)
 
 	go func() {
@@ -185,6 +183,7 @@ func processJob(jobResponse *JobResponse) (err error) {
 	}
 
 	var log strings.Builder
+	lastOffset := 0
 
 	fmt.Printf("--- Job Id: %d\n", jobResponse.ID)
 
@@ -207,10 +206,16 @@ func processJob(jobResponse *JobResponse) (err error) {
 			output, err := shellCmd.CombinedOutput()
 			log.WriteString(string(output))
 
-			traceErr := updateJobTrace(jobResponse.ID, log.String(), token)
+			fullLog := log.String()
+			currentLog := fullLog[lastOffset:]
 
-			if traceErr != nil {
-				fmt.Printf("[Job %d] Warning: Trace update failed: %v\n", jobResponse.ID, traceErr)
+			if len(currentLog) > 0 {
+				traceErr := updateJobTrace(jobResponse.ID, currentLog, lastOffset, token)
+
+				if traceErr != nil {
+					fmt.Printf("[Job %d] Warning: Trace update failed: %v\n", jobResponse.ID, traceErr)
+				}
+				lastOffset += len(currentLog)
 			}
 
 			if err != nil {
@@ -241,7 +246,7 @@ func processJob(jobResponse *JobResponse) (err error) {
 	return nil
 }
 
-func updateJobTrace(jobId int, logContent string, token string) error {
+func updateJobTrace(jobId int, logContent string, offset int, token string) error {
 
 	url := fmt.Sprintf("%s/%d/trace", AppConfig.StatusUpdateURL, jobId)
 
@@ -250,16 +255,10 @@ func updateJobTrace(jobId int, logContent string, token string) error {
 		return errorLogger(err, constants.SERIALIZATION_ERROR)
 	}
 
-	logIndex := 0
-	if len(logContent) > 0 {
-		logIndex = len(logContent) - 1
-	}
-
-	// Required headers for the Trace API
+	lastByte := offset + len(logContent) - 1
+	req.Header.Set("Content-Range", fmt.Sprintf("%d-%d", offset, lastByte))
 	req.Header.Set("JOB-TOKEN", token)
 	req.Header.Set("Content-Type", "text/plain")
-	// Content-Range tells GitLab: "Here is the log from byte 0 to byte X"
-	req.Header.Set("Content-Range", fmt.Sprintf("0-%d", logIndex))
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -267,10 +266,10 @@ func updateJobTrace(jobId int, logContent string, token string) error {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("Response Code:", resp.StatusCode)
+	//fmt.Println("Response Code:", resp.StatusCode)
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	fmt.Println("Raw response:", string(bodyBytes))
+	// bodyBytes, _ := io.ReadAll(resp.Body)
+	// fmt.Println("Raw response:", string(bodyBytes))
 
 	_, httpResponse := validateResponse(resp)
 
