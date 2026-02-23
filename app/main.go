@@ -266,7 +266,7 @@ func updateJobTrace(jobId int, logContent string, token string) error {
 	}
 	defer resp.Body.Close()
 
-	//fmt.Println("Raw JSON Response:", resp.StatusCode)
+	fmt.Println("Raw JSON Response:", resp.StatusCode)
 
 	_, httpResponse := validateResponse(resp)
 
