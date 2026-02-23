@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -159,18 +158,18 @@ func processJob(jobResponse *JobResponse) (err error) {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
-		heartbeatMsg := strconv.Itoa(jobResponse.ID) + constants.HEARTBEAT_GENERIC_MESSAGE
+		//heartbeatMsg := "[Heartbeat] | " + strconv.Itoa(jobResponse.ID) + " " + constants.HEARTBEAT_GENERIC_MESSAGE
 
 		for {
 			select {
 			case <-ticker.C:
-				_, err := updateJobStatus(jobResponse.ID, constants.RUNNING, heartbeatMsg, token)
+				_, err := updateJobStatus(jobResponse.ID, constants.RUNNING, "", token)
 				if err != nil {
-					fmt.Printf("[JobId %d] Heartbeat failed: %v\n", jobResponse.ID, err)
+					fmt.Printf("[Heartbeat] | [JobId %d] Heartbeat failed: %v\n", jobResponse.ID, err)
 				}
-				fmt.Printf("Heartbeat sent for Job %d\n", jobResponse.ID)
+				fmt.Printf("[Heartbeat] | Heartbeat sent for Job %d\n", jobResponse.ID)
 			case <-heartBeat:
-				fmt.Printf("Stopping heartbeat for Job %d\n", jobResponse.ID)
+				fmt.Printf("[Heartbeat] |Stopping heartbeat for Job %d\n", jobResponse.ID)
 				return
 			}
 		}
@@ -205,8 +204,13 @@ func processJob(jobResponse *JobResponse) (err error) {
 			log.WriteString(header)
 
 			output, err := shellCmd.CombinedOutput()
-
 			log.WriteString(string(output))
+
+			traceErr := updateJobTrace(jobResponse.ID, log.String(), token)
+
+			if traceErr != nil {
+				fmt.Printf("[Job %d] Warning: Trace update failed: %v\n", jobResponse.ID, traceErr)
+			}
 
 			if err != nil {
 				heartBeat <- true
@@ -231,6 +235,36 @@ func processJob(jobResponse *JobResponse) (err error) {
 
 	if updateStatusError != nil {
 		return errorLogger(updateStatusError, "Error Occurred While Updating Job Status")
+	}
+
+	return nil
+}
+
+func updateJobTrace(jobId int, logContent string, token string) error {
+
+	url := fmt.Sprintf("%s/%d/trace", AppConfig.StatusUpdateURL, jobId)
+
+	req, err := http.NewRequest(constants.PATCH_METHOD, url, strings.NewReader(logContent))
+	if err != nil {
+		return errorLogger(err, constants.SERIALIZATION_ERROR)
+	}
+
+	// Required headers for the Trace API
+	req.Header.Set("JOB-TOKEN", token)
+	req.Header.Set("Content-Type", "text/plain")
+	// Content-Range tells GitLab: "Here is the log from byte 0 to byte X"
+	req.Header.Set("Content-Range", fmt.Sprintf("0-%d", len(logContent)))
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return errorLogger(err, constants.HTTP_REQUEST_ERROR)
+	}
+	defer resp.Body.Close()
+
+	_, httpResponse := validateResponse(resp)
+
+	if httpResponse != nil {
+		return httpResponse
 	}
 
 	return nil
@@ -287,6 +321,7 @@ func loadEnv() {
 		VerifyURL:         getEnvOrPanic(constants.VERIFY_URL),
 		RequestURL:        getEnvOrPanic(constants.REQUEST_URL),
 		StatusUpdateURL:   getEnvOrPanic(constants.STATUS_UPDATE_URL),
+		SendLogURL:        getEnvOrPanic(constants.STATUS_UPDATE_URL),
 	}
 }
 

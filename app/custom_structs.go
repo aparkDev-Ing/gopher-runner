@@ -37,4 +37,5 @@ type Config struct {
 	VerifyURL         string
 	RequestURL        string
 	StatusUpdateURL   string
+	SendLogURL        string
 }
