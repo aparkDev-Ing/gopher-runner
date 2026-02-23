@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -266,7 +267,10 @@ func updateJobTrace(jobId int, logContent string, token string) error {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("Raw JSON Response:", resp.StatusCode)
+	fmt.Println("Response Code:", resp.StatusCode)
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	fmt.Println("Raw response:", string(bodyBytes))
 
 	_, httpResponse := validateResponse(resp)
 
