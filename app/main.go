@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	//"runtime"
@@ -348,38 +352,65 @@ func main() {
 	fmt.Println("Go-Runner Process Starts")
 	loadEnv()
 	healthCheck()
-	jobHandler()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	jobHandler(ctx)
+	fmt.Println("[Main] All workers finished. Runner exited gracefully.")
 }
 
-func jobHandler() {
+func jobHandler(ctx context.Context) {
 
 	jobQueue := make(chan *JobResponse, 10)
 
+	var countDownLatch sync.WaitGroup
+
 	noOfThread := 3 //runtime.NumCpu()
 	for i := 0; i < noOfThread; i++ {
-		go worker(jobQueue, i+1)
+		countDownLatch.Add(1)
+		func() {
+			//defer countDownLatch.Done()
+			go worker(jobQueue, i+1, &countDownLatch)
+		}()
 	}
 
 	for {
-		job, err := requestJob()
 
-		if err != nil {
-			fmt.Println(err)
-			time.Sleep(10 * time.Second)
-			continue
+		select {
+		case <-ctx.Done():
+			{
+				fmt.Println("\n[Main] Shutdown signal received. Stopping job requests...")
+				close(jobQueue)
+				countDownLatch.Wait()
+				return
+			}
+
+		default:
+			{
+				job, err := requestJob()
+
+				if err != nil {
+					fmt.Println(err)
+					time.Sleep(10 * time.Second)
+					continue
+				}
+
+				if job != nil {
+					jobQueue <- job
+				} else {
+					fmt.Printf("No Job Found. ")
+				}
+
+				time.Sleep(1 * time.Second)
+			}
 		}
-
-		if job != nil {
-			jobQueue <- job
-		} else {
-			//fmt.Printf("No Job Found. ")
-		}
-
-		time.Sleep(1 * time.Second)
 	}
 }
 
-func worker(jobQueue <-chan *JobResponse, threadId int) {
+func worker(jobQueue <-chan *JobResponse, threadId int, countDownLatch *sync.WaitGroup) {
+
+	defer countDownLatch.Done()
 	for job := range jobQueue {
 		printLog(job.ID, threadId, constants.CLAIMED)
 		err := processJob(job)
