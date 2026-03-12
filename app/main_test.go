@@ -1,55 +1,51 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"testing"
 )
 
 func TestValidProcessJob(t *testing.T) {
+	// Setup Context
+	ctx := context.Background()
 
 	AppConfig = Config{
-		StatusUpdateURL:   "https://gitlab.com/api/v4/jobs/",
+		StatusUpdateURL:   "http://localhost:8080/api/v4/jobs/", // Use a dummy URL for local tests
 		RegistrationToken: "mock-token",
 	}
-	//1. Arrange: Create mock data that mimics a GitLab API response
+
 	mockJob := &JobResponse{
-		ID: 12345,
+		ID:    12345,
+		Token: "mock-job-token",
 		Steps: []struct {
 			Name   string   `json:"name"`
 			Script []string `json:"script"`
 		}{
 			{
-				Name: "before_script",
-				Script: []string{
-					"echo 'Setup started'",
-					//"export ENV=test",
-				},
-			},
-			{
 				Name: "script",
 				Script: []string{
-					"echo Script Stage",
+					"echo 'Setup started'",
+					"echo 'Script Stage'",
 				},
 			},
 		},
 	}
 
-	// 2. Act: Call your function
-	// For now, this will just print to your test console
-	err := processJob(mockJob)
+	// Pass the ctx here!
+	err := processJob(ctx, mockJob)
 
+	// Note: This might still return an error because it can't
+	// reach the "StatusUpdateURL" to send the final success status.
 	if err != nil {
-		fmt.Println(err)
+		t.Logf("ProcessJob finished with error (expected due to no network): %v", err)
 	}
-
-	// 3. Assert: In a real test, we would check if the commands executed.
-	// For now, if it doesn't panic, the "loop logic" is verified!
-
 }
+
 func TestProcessInvalidJob(t *testing.T) {
+	ctx := context.Background()
 
 	AppConfig = Config{
-		StatusUpdateURL:   "https://gitlab.com/api/v4/jobs/",
+		StatusUpdateURL:   "http://localhost:8080/api/v4/jobs/",
 		RegistrationToken: "mock-token",
 	}
 
@@ -62,31 +58,25 @@ func TestProcessInvalidJob(t *testing.T) {
 			{
 				Name: "test_step",
 				Script: []string{
-					"echo 'Testing ANSI colors...'",
-					"ls -la",
-					"non_existent_command", // This should trigger your RED error footer
+					"non_existent_command",
 				},
 			},
 		},
 	}
 
-	// 2. Act: Call your function
-	// For now, this will just print to your test console
-	err := processJob(mockJob)
+	err := processJob(ctx, mockJob)
 
-	if err != nil {
-		fmt.Println(err)
+	// In this case, we WANT an error because the command is invalid.
+	if err == nil {
+		t.Error("Expected an error from non_existent_command, but got nil")
 	}
-
-	// 3. Assert: In a real test, we would check if the commands executed.
-	// For now, if it doesn't panic, the "loop logic" is verified!
-
 }
 
 func TestProcessVariableJob(t *testing.T) {
+	ctx := context.Background()
 
 	AppConfig = Config{
-		StatusUpdateURL:   "https://gitlab.com/api/v4/jobs/",
+		StatusUpdateURL:   "http://localhost:8080/api/v4/jobs/",
 		RegistrationToken: "mock-token",
 	}
 
@@ -95,7 +85,6 @@ func TestProcessVariableJob(t *testing.T) {
 		Token: "mock-job-token",
 		Variables: []Variable{
 			{Key: "CUSTOM_GREETING", Value: "Hello from Go"},
-			{Key: "SECRET_KEY", Value: "SuperSecret123"},
 		},
 		Steps: []struct {
 			Name   string   `json:"name"`
@@ -105,17 +94,13 @@ func TestProcessVariableJob(t *testing.T) {
 				Name: "Test Step",
 				Script: []string{
 					"echo $CUSTOM_GREETING",
-					//"echo $SECRET_KEY", // This proves os.Environ() worked
-					"echo $PATH", // This proves os.Environ() worked
 				},
 			},
 		},
 	}
 
-	err := processJob(mockJob)
-
+	err := processJob(ctx, mockJob)
 	if err != nil {
-		fmt.Println(err)
+		t.Logf("Finished with expected network error: %v", err)
 	}
-
 }

@@ -5,8 +5,9 @@ type VerifyRequest struct {
 }
 
 type JobRequest struct {
-	Token   string   `json:"token"`
-	TagList []string `json:"tag_list"`
+	Token              string   `json:"token"`
+	TagList            []string `json:"tag_list"`
+	LongPollingTimeout int      `json:"long_polling_timeout"`
 }
 
 type JobResponse struct {
