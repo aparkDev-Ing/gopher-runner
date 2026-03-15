@@ -1,4 +1,5 @@
-Gopher-Runner: Building a Custom GitLab Runner
+Gopher-Runner | Building a Custom GitLab Runner:
+
 I’ve always been curious about what happens behind the scenes when a CI/CD job is triggered. To find out, I decided to build my own GitLab Runner using Go. This project isn't just about making something that works; it's a deep dive into GitLab's internal APIs, asynchronous job handling, and the overall CI/CD lifecycle.
 
 Why I built this :
