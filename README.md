@@ -1,93 +1,52 @@
-# gopher-runner
+Gopher-Runner: Building a Custom GitLab Runner
+I’ve always been curious about what happens behind the scenes when a CI/CD job is triggered. To find out, I decided to build my own GitLab Runner using Go. This project isn't just about making something that works; it's a deep dive into GitLab's internal APIs, asynchronous job handling, and the overall CI/CD lifecycle.
+
+Why I built this :
+The goal was simple: Deconstruct the magic. I wanted to see how the GitLab Server manages runners and how those runners, in turn, handle jobs at the system level.By building Gopher-Runner, I was able to:
+
+1) Reverse-Engineer the GitLab Core APIs
+
+I mapped out the essential communication flow required for a functional runner:
+
+Verification: POST /api/v4/runners/verify — Ensuring the runner is healthy and authorized.
+
+Job Request: POST /api/v4/jobs/request — Polling the server for available work.
+
+Status Updates: PUT /api/v4/jobs/:id — Reporting state changes (Running, Success, Failed).
+
+Log Streaming: PATCH /api/v4/jobs/:id/trace — Sending script output (I/O logs) back to the server in real-time.
+
+2) I designed the runner to handle high-volume job polling and maintenance without blocking the system:
+
+Main Thread (Producer): Constantly requests new jobs from the GitLab server and pushes them into a central Channel.
+
+Worker Pool (Consumers): Multiple Goroutines poll from the channel. Once a job is claimed, a worker executes the script and handles all status/log updates independently.
+
+Asynchronous Heartbeat: Implemented a background process that utilizes a Go Ticker and Channel to send a "Heartbeat" to the GitLab server every 30 seconds. This ensures the server knows the runner is healthy and prevents active jobs from being timed out or marked as "stuck."
+
+Graceful Fault Handling: Each worker is designed to catch failures during execution, ensuring the GitLab server is updated with a failed status rather than leaving the job hanging.
+
+Graceful Shutdown: Implemented signal handling so that even if os.Exit is triggered, the runner waits for active Goroutines to finish their current tasks before shutting down, preventing corrupted job states.
 
 
+3) I gained a granular understanding of how a high-level .gitlab-ci.yml definition is broken down into individual bash commands and how those steps are orchestrated by the runner.
 
-## Getting started
+Language: Go (The perfect tool for high-performance, concurrent systems)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+🏁 Getting Started
+Prerequisites
+Go 1.21+
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+A GitLab instance and a Runner registration token.
 
-## Add your files
+Quick Start
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Bash
+git clone https://gitlab.com/aparkdev-ing/gopher-runner.git
+cd gopher-runner
+go build -o gopher-runner
+export GITLAB_TOKEN="Token"
 
-```
-cd existing_repo
-git remote add origin https://gitlab.com/aparkdev-ing/gopher-runner.git
-git branch -M main
-git push -uf origin main
-```
+Author: Aaron Park
 
-## Integrate with your tools
-
-* [Set up project integrations](https://gitlab.com/aparkdev-ing/gopher-runner/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Status: Under active development. Feel free to reach out if you have questions!
